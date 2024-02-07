@@ -35,6 +35,7 @@ except ImportError:
     from typing_extensions import Literal
 
 import numpy as np
+import onnxmltools
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
@@ -468,6 +469,34 @@ class RegressionModel(GlobalForecastingModel):
         )
 
         return self.model.estimators_[horizon + target_dim]
+
+    @property
+    def supports_exporting_to_onnx(self) -> bool:
+        """
+        Whether the model supports exporting the model in ONNX format
+        """
+        return True
+
+    def export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
+        """
+        Exports the model as an ONNX file.
+        """
+        super().check_export_onnx(path, **onnx_kwargs)
+        if self.model is None:
+            raise_log(
+                AssertionError(
+                    f"Model '{path.__class__}' supports ONNX, but the model does not yet exist."
+                ),
+                logger=logger,
+            )
+
+        if path is None:
+            path = f"{self._default_save_path()}.onnx"
+
+        # TODO find and element initial_type, e.g.  = [("float_input", FloatTensorType([None, 4]))]
+        onx = onnxmltools.convert_sklearn(self.model, initial_types=[("input", FloatTensorType([1, 30]))])
+        with open(path, "wb") as f:
+            f.write(onx.SerializeToString())
 
     def _create_lagged_data(
         self,

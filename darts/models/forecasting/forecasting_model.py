@@ -279,6 +279,13 @@ class ForecastingModel(ABC, metaclass=ModelMeta):
         return False
 
     @property
+    def supports_exporting_to_onnx(self) -> bool:
+        """
+        Whether the model supports exporting the model in ONNX format
+        """
+        return False
+
+    @property
     def output_chunk_length(self) -> Optional[int]:
         """
         Number of time steps predicted at once by the model, not defined for statistical models.
@@ -1886,6 +1893,22 @@ class ForecastingModel(ABC, metaclass=ModelMeta):
     @classmethod
     def _default_save_path(cls) -> str:
         return f"{cls.__name__}_{datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')}"
+
+    def export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
+        """
+        Exports the model as an ONNX file.
+
+        """
+        self.check_export_onnx(path, onnx_kwargs=onnx_kwargs)
+
+    def check_export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
+        if not self.supports_exporting_to_onnx:
+            raise_log(
+                AssertionError(
+                    f"Model '{path.__class__}' does not support exporting to ONNX."
+                ),
+                logger=logger,
+            )
 
     def save(
         self, path: Optional[Union[str, os.PathLike, BinaryIO]] = None, **pkl_kwargs
