@@ -11,8 +11,10 @@ from typing import List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from catboost import CatBoostRegressor
+import onnxmltools
+from onnxmltools.convert.common.data_types import FloatTensorType
 
-from darts.logging import get_logger
+from darts.logging import get_logger, raise_log
 from darts.models.forecasting.regression_model import RegressionModel, _LikelihoodMixin
 from darts.timeseries import TimeSeries
 
@@ -309,3 +311,28 @@ class CatBoostModel(RegressionModel, _LikelihoodMixin):
             if "target" in self.lags
             else self.output_chunk_length,
         )
+
+    @property
+    def supports_exporting_to_onnx(self) -> bool:
+        return True
+
+    def export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
+        """
+        Exports the model as an ONNX file.
+        """
+        super().check_export_onnx(path, **onnx_kwargs)
+        if self.model is None:
+            raise_log(
+                AssertionError(
+                    f"Model '{path.__class__}' supports ONNX, but the model does not yet exist."
+                ),
+                logger=logger,
+            )
+
+        if path is None:
+            path = f"{self._default_save_path()}.onnx"
+
+        # Jeadie: This doesn;t really work yet. Darts is doing something rather odd, so the catboost
+        # libraries own `.save_model` is returning approx. an empty catboost.
+        self.model.estimator.__setattr__('_random_seed', '42') # This may be a bug with Darts.
+        self.model.estimator.save_model(path, format="onnx") # estimator is underlying catboost model.

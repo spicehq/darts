@@ -2016,6 +2016,60 @@ class TorchForecastingModel(GlobalForecastingModel, ABC):
             else True  # all torch models can be probabilistic (via Dropout)
         )
 
+    @property
+    def supports_exporting_to_onnx(self) -> bool:
+        """
+        Whether the model supports exporting the model in ONNX format
+        """
+        return True
+
+    def export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
+        """
+        Exports the model as an ONNX file.
+        """
+        super().export_onnx(path, **onnx_kwargs)
+        if not self.model_created:
+            raise_log(
+                AssertionError(
+                    f"Model '{path.__class__}' supports ONNX, but the model does not yet exist."
+                ),
+                logger=logger,
+            )
+
+        if path is None:
+            path = f"{self._default_save_path()}.onnx"
+
+        # TODO: This only works for PastCovariatesModel so far
+        if not issubclass(self.__class__, PastCovariatesTorchModel):
+            raise_log(
+                AssertionError(
+                    f"For TorchForeacstingModels, currently only PastCovariatesModel are supported."
+                ),
+                logger=logger,
+            )
+
+        dim_component = self.past_covariate_series.n_components
+        (
+            past_target,
+            past_covariates,
+            future_past_covariates,
+            static_covariates,
+            # I think these have to do with future covariates (which isn't supported in Dlinear)
+        ) = [torch.Tensor(x).unsqueeze(0) if x is not None else None for x in self.train_sample]
+
+        n_past_covs = (
+            past_covariates.shape[dim_component] if past_covariates is not None else 0
+        )
+
+        input_past = torch.cat(
+            [ds for ds in [past_target, past_covariates] if ds is not None],
+            dim=dim_component,
+        )
+
+        input_sample = [input_past.float(), static_covariates.float() if static_covariates is not None else None]
+        self.model.float().to_onnx(path, input_sample=input_sample, opset_version=17)
+        # self.model.to_onnx(path, torch.from_numpy(self.train_sample[0]), **onnx_kwargs)
+
     def _check_optimizable_historical_forecasts(
         self,
         forecast_horizon: int,
