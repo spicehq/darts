@@ -2048,7 +2048,7 @@ class TorchForecastingModel(GlobalForecastingModel, ABC):
                 logger=logger,
             )
 
-        dim_component = self.past_covariate_series.n_components
+        dim_component = self.past_covariate_series.n_components if self.past_covariate_series is not None else 1
         (
             past_target,
             past_covariates,
