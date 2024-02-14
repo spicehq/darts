@@ -2040,15 +2040,14 @@ class TorchForecastingModel(GlobalForecastingModel, ABC):
             path = f"{self._default_save_path()}.onnx"
 
         # TODO: This only works for PastCovariatesModel so far
-        if not issubclass(self.__class__, PastCovariatesTorchModel):
+        if self.considers_static_covariates:
             raise_log(
                 AssertionError(
-                    f"For TorchForeacstingModels, currently only PastCovariatesModel are supported."
+                    f"For TorchForeacstingModels, models with static covariates isn't supported."
                 ),
                 logger=logger,
             )
 
-        dim_component = self.past_covariate_series.n_components
         (
             past_target,
             past_covariates,
@@ -2057,18 +2056,19 @@ class TorchForecastingModel(GlobalForecastingModel, ABC):
             # I think these have to do with future covariates (which isn't supported in Dlinear)
         ) = [torch.Tensor(x).unsqueeze(0) if x is not None else None for x in self.train_sample]
 
-        n_past_covs = (
-            past_covariates.shape[dim_component] if past_covariates is not None else 0
-        )
-
         input_past = torch.cat(
             [ds for ds in [past_target, past_covariates] if ds is not None],
-            dim=dim_component,
+            dim=2, # Shape is (1, lookback_size, #variates (in either target or series))
         )
 
-        input_sample = [input_past.float(), static_covariates.float() if static_covariates is not None else None]
-        self.model.float().to_onnx(path, input_sample=input_sample, opset_version=17)
-        # self.model.to_onnx(path, torch.from_numpy(self.train_sample[0]), **onnx_kwargs)
+        self.model.float().to_onnx(
+            file_path=path,
+            input_sample=[
+                input_past.float(),
+                static_covariates.float() if static_covariates is not None else None
+            ],
+            opset_version=17
+        )
 
     def _check_optimizable_historical_forecasts(
         self,
