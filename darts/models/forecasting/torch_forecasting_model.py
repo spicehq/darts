@@ -2048,7 +2048,6 @@ class TorchForecastingModel(GlobalForecastingModel, ABC):
                 logger=logger,
             )
 
-        dim_component = self.past_covariate_series.n_components
         (
             past_target,
             past_covariates,
@@ -2057,13 +2056,9 @@ class TorchForecastingModel(GlobalForecastingModel, ABC):
             # I think these have to do with future covariates (which isn't supported in Dlinear)
         ) = [torch.Tensor(x).unsqueeze(0) if x is not None else None for x in self.train_sample]
 
-        n_past_covs = (
-            past_covariates.shape[dim_component] if past_covariates is not None else 0
-        )
-
         input_past = torch.cat(
             [ds for ds in [past_target, past_covariates] if ds is not None],
-            dim=dim_component,
+            dim=2, # Shape is (1, lookback_size, no. of variates (in either target or series))
         )
 
         input_sample = [input_past.float(), static_covariates.float() if static_covariates is not None else None]
