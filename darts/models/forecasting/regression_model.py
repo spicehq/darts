@@ -477,10 +477,7 @@ class RegressionModel(GlobalForecastingModel):
         """
         return True
 
-    def export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
-        """
-        Exports the model as an ONNX file.
-        """
+    def check_export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
         super().check_export_onnx(path, **onnx_kwargs)
         if self.model is None:
             raise_log(
@@ -490,11 +487,39 @@ class RegressionModel(GlobalForecastingModel):
                 logger=logger,
             )
 
+
+    def get_initial_types(self) -> List[Optional["FloatTensorType"]]:
+        dim_component = self.past_covariate_series.n_components
+        # dim_component = 2
+        (
+            past_target,
+            past_covariates,
+            future_past_covariates,
+            static_covariates,
+        ) = [np.expand_dims(x, axis=0) if x is not None else None for x in self.train_sample]
+
+        input_past = np.concatenate(
+            [ds for ds in [past_target, past_covariates] if ds is not None],
+            axis=dim_component,
+        ).astype(np.float32)
+        return [
+            input_past.float(),
+            static_covariates.float() if static_covariates is not None else None
+        ]
+
+
+    def export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
+        """
+        Exports the model as an ONNX file.
+        """
+        self.check_export_onnx(path, **onnx_kwargs)
         if path is None:
             path = f"{self._default_save_path()}.onnx"
 
-        # TODO find and element initial_type, e.g.  = [("float_input", FloatTensorType([None, 4]))]
-        onx = onnxmltools.convert_sklearn(self.model, initial_types=[("input", FloatTensorType([1, 30]))])
+        onx = onnxmltools.convert_sklearn(
+            self.model,
+            initial_types=self.get_initial_types()
+        )
         with open(path, "wb") as f:
             f.write(onx.SerializeToString())
 
@@ -573,6 +598,7 @@ class RegressionModel(GlobalForecastingModel):
             future_covariates,
             max_samples_per_ts,
         )
+        self.train_sample = np.expand_dims(training_samples[0,...], axis=0)
 
         # if training_labels is of shape (n_samples, 1) flatten it to shape (n_samples,)
         if len(training_labels.shape) == 2 and training_labels.shape[1] == 1:

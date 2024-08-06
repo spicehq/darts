@@ -24,6 +24,8 @@ from darts.models.forecasting.regression_model import (
     LAGS_TYPE,
     RegressionModel,
 )
+import onnxmltools
+from onnxconverter_common.data_types import FloatTensorType
 
 logger = get_logger(__name__)
 
@@ -166,3 +168,16 @@ class RandomForest(RegressionModel):
             model=RandomForestRegressor(**kwargs),
             use_static_covariates=use_static_covariates,
         )
+
+    def export_onnx(self, path: Optional[str] = None, **onnx_kwargs) -> None:
+        """
+        Exports the model as an ONNX file.
+        """
+        super().check_export_onnx(path, **onnx_kwargs)
+        if path is None:
+            path = f"{self._default_save_path()}.onnx"
+
+        # TODO find and element initial_type, e.g.  = [("float_input", FloatTensorType([None, 4]))]
+        onx = onnxmltools.convert_sklearn(self.model, initial_types=self.get_initial_types())
+        with open(path, "wb") as f:
+            f.write(onx.SerializeToString())
